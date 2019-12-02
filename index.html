@@ -139,6 +139,148 @@
           <div id="js-content" class="content-ll">
             
   
+    <article id="post-EventBus使用(2)" class="article article-type-post  article-index" itemscope itemprop="blogPost">
+  <div class="article-inner">
+    
+      <header class="article-header">
+        
+  
+    <h1 itemprop="name">
+      <a class="article-title" href="/2019/12/01/EventBus%E4%BD%BF%E7%94%A8(2)/">EventBus使用(2)</a>
+    </h1>
+  
+
+        
+        <a href="/2019/12/01/EventBus%E4%BD%BF%E7%94%A8(2)/" class="archive-article-date">
+  	<time datetime="2019-12-01T14:45:50.941Z" itemprop="datePublished"><i class="icon-calendar icon"></i>2019-12-01</time>
+</a>
+        
+      </header>
+    
+    <div class="article-entry" itemprop="articleBody">
+      
+        <hr>
+<p>title: EventBus使用(2)<br>tags:<br>        - Android<br>        - EventBus</p>
+<hr>
+<h3 id="前言"><a href="#前言" class="headerlink" title="前言"></a>前言</h3><p>本次记录的是EventBus索引(Subscriber Index)的使用, 索引提高了eventbus通过注解找订阅方法的速度; 有的博客说EventBus用索引能提高速度是因为索引避开了使用反射, 但我从源码看出并不是这样。在下面我会分析EventBus索引能提高速度原因(可能我的观点有错)。 </p>
+<h3 id="使用"><a href="#使用" class="headerlink" title="使用"></a>使用</h3><p>非常简单直接, 贴代码<br>app下的gradle配置, kotlin或者Gradle Plugin低于2.2.0看<a href="http://greenrobot.org/eventbus/documentation/subscriber-index/" target="_blank" rel="noopener">这里</a></p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><span class="line">android &#123;</span><br><span class="line">    defaultConfig &#123;</span><br><span class="line">        ....</span><br><span class="line">        javaCompileOptions &#123;</span><br><span class="line">            annotationProcessorOptions &#123;</span><br><span class="line">                arguments = [ eventBusIndex : &apos;com.example.myapp.MyEventBusIndex&apos; ]</span><br><span class="line">            &#125;</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br><span class="line"> </span><br><span class="line">dependencies &#123;</span><br><span class="line">    implementation &apos;org.greenrobot:eventbus:3.1.1&apos;</span><br><span class="line">    annotationProcessor &apos;org.greenrobot:eventbus-annotation-processor:3.1.1&apos;</span><br><span class="line">&#125;</span><br><span class="line">```  </span><br><span class="line">&lt;br/&gt;</span><br><span class="line">Rebuild一下, 就会根据你的配置生成一个索引类(这里类为MyEventBusIndex), 然后使用这个索引</span><br></pre></td></tr></table></figure>
+<p>EventBus.builder().addIndex(new MyEventBusIndex()).installDefaultEventBus();</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">就能像往常一样使用`EventBus.getDefault()`获取EventBus实例使用了。  </span><br><span class="line"></span><br><span class="line">### 加速原理  </span><br><span class="line">下面开始从源码分析EventBus索引是怎么加速的  </span><br><span class="line"></span><br><span class="line">先看Gradle帮我们生成的索引类</span><br></pre></td></tr></table></figure>
+<p>public class MyEventBusIndex implements SubscriberInfoIndex {<br>    private static final Map&lt;Class&lt;?&gt;, SubscriberInfo&gt; SUBSCRIBER_INDEX;</p>
+<pre><code>static {
+    SUBSCRIBER_INDEX = new HashMap&lt;Class&lt;?&gt;, SubscriberInfo&gt;();
+
+    putIndex(new SimpleSubscriberInfo(SecondActivity.class, true, new SubscriberMethodInfo[] {
+        new SubscriberMethodInfo(&quot;stickyEvent&quot;, MessageEvent.class, ThreadMode.POSTING, 0, true),
+    }));
+
+    putIndex(new SimpleSubscriberInfo(MainActivity.class, true, new SubscriberMethodInfo[] {
+        new SubscriberMethodInfo(&quot;changeTextEvent&quot;, MessageEvent.class),
+    }));
+
+}
+
+private static void putIndex(SubscriberInfo info) {
+    SUBSCRIBER_INDEX.put(info.getSubscriberClass(), info);
+}
+
+@Override
+public SubscriberInfo getSubscriberInfo(Class&lt;?&gt; subscriberClass) {
+    SubscriberInfo info = SUBSCRIBER_INDEX.get(subscriberClass);
+    if (info != null) {
+        return info;
+    } else {
+        return null;
+    }
+}</code></pre><figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">生成的代码很简单, 就是用Map把有订阅方法的类和它的订阅方法相关信息存起来, 这里的`SubscriberMethodInfo`类从方法就可以看出是订阅方法信息类, 封装订阅方法信息的。还有一个类`SimpleSubscriberInfo`, 它是加速的关键点; 记住索引类的`getSubscriberInfo()`方法就是返回它。</span><br><span class="line"> </span><br><span class="line">&lt;br/&gt;</span><br><span class="line">下面从EventBus的构造器来认识一个关键的类</span><br></pre></td></tr></table></figure>
+<p>EventBus(EventBusBuilder builder) {<br>       …<br>        subscriberMethodFinder = new SubscriberMethodFinder(builder.subscriberInfoIndexes,<br>                builder.strictMethodVerification, builder.ignoreGeneratedIndex);<br>        …<br>    }</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">构造器接收一个建造者, 用建造者来初始化成员变量参数; 这里我只保留了一个关键的成员变量`subscriberMethodFinder`, 初始化这个类传入的第一个参数为我们索引类实例(关键), 第二个参数我也不知干啥用的, 第三个是是否屏蔽索引(默认false)。  </span><br><span class="line">&lt;br/&gt;</span><br><span class="line">接下来我们来看EventBus的register()方法</span><br></pre></td></tr></table></figure>
+<p> public void register(Object subscriber) {<br>        Class&lt;?&gt; subscriberClass = subscriber.getClass();<br>        // 找订阅方法<br>        List<SubscriberMethod> subscriberMethods = subscriberMethodFinder.findSubscriberMethods(subscriberClass);<br>        // 保存<br>        synchronized (this) {<br>            for (SubscriberMethod subscriberMethod : subscriberMethods) {<br>                subscribe(subscriber, subscriberMethod);<br>            }<br>        }<br>    }</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">这段代码的逻辑其实就是找出这个类的所有订阅方法, 然后保存起来; 关键点就是找订阅方法那里。点进去`findSubscriberMethods()`方法(这是`SubscriberMethodFinder`的方法)看看</span><br></pre></td></tr></table></figure>
+<p>List<SubscriberMethod> findSubscriberMethods(Class&lt;?&gt; subscriberClass) {<br>        List<SubscriberMethod> subscriberMethods = METHOD_CACHE.get(subscriberClass);<br>        if (subscriberMethods != null) {<br>            return subscriberMethods;<br>        }</p>
+<pre><code>    if (ignoreGeneratedIndex) {
+        subscriberMethods = findUsingReflection(subscriberClass);
+    } else {
+        subscriberMethods = findUsingInfo(subscriberClass);
+    }
+    if (subscriberMethods.isEmpty()) {
+        throw new EventBusException(&quot;Subscriber &quot; + subscriberClass
+                + &quot; and its super classes have no public methods with the @Subscribe annotation&quot;);
+    } else {
+        METHOD_CACHE.put(subscriberClass, subscriberMethods);
+        return subscriberMethods;
+    }
+}</code></pre><figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">`ignoreGeneratedIndex`这里默认为false, 上面说过; 我们点进`findUsingInfo(subscriberClass)`(这是`SubscriberMethodFinder`的方法)看看</span><br></pre></td></tr></table></figure>
+<p>private List<SubscriberMethod> findUsingInfo(Class&lt;?&gt; subscriberClass) {<br>        FindState findState = prepareFindState();<br>        findState.initForSubscriber(subscriberClass);<br>        while (findState.clazz != null) {<br>            ① findState.subscriberInfo = getSubscriberInfo(findState);<br>            if (findState.subscriberInfo != null) {<br>                SubscriberMethod[] array = findState.subscriberInfo.getSubscriberMethods();<br>                for (SubscriberMethod subscriberMethod : array) {<br>                    if (findState.checkAdd(subscriberMethod.method, subscriberMethod.eventType)) {<br>                        findState.subscriberMethods.add(subscriberMethod);<br>                    }<br>                }<br>            } else {<br>                findUsingReflectionInSingleClass(findState);<br>            }<br>            findState.moveToSuperclass();<br>        }<br>        return getMethodsAndRelease(findState);<br>    }</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">先进去①的`getSubscriberInfo()`看看</span><br></pre></td></tr></table></figure>
+<p> private SubscriberInfo getSubscriberInfo(FindState findState) {<br>        if (findState.subscriberInfo != null &amp;&amp; findState.subscriberInfo.getSuperSubscriberInfo() != null) {<br>            SubscriberInfo superclassInfo = findState.subscriberInfo.getSuperSubscriberInfo();<br>            if (findState.clazz == superclassInfo.getSubscriberClass()) {<br>                return superclassInfo;<br>            }<br>        }</p>
+<pre><code>    // 关键
+    if (subscriberInfoIndexes != null) {
+        for (SubscriberInfoIndex index : subscriberInfoIndexes) {
+            SubscriberInfo info = index.getSubscriberInfo(findState.clazz);
+            if (info != null) {
+                return info;
+            }
+        }
+    }
+    return null;
+}</code></pre><figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">还记得SubscriberMethodFinder初始化传进来的索引类吗, 这个`subscriberInfoIndexes`就是, 这里返回的就是我在索引类那里说的关键类`SimpleSubscriberInfo`, 下面我们接着①下面的代码</span><br></pre></td></tr></table></figure>
+<p>…<br>① findState.subscriberInfo = getSubscriberInfo(findState);<br>        if (findState.subscriberInfo != null) {<br>                ② SubscriberMethod[] array = findState.subscriberInfo.getSubscriberMethods();<br>                for (SubscriberMethod subscriberMethod : array) {<br>                        if (findState.checkAdd(subscriberMethod.method, subscriberMethod.eventType)) {<br>                                findState.subscriberMethods.add(subscriberMethod);<br>                        }<br>                }<br>        } else {<br>                findUsingReflectionInSingleClass(findState);<br>        }<br>…</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line">反射就发生在②处了, 点进`SimpleSubscriberInfo`类的`getSubscriberMethods()`方法  </span><br><span class="line">```(java)</span><br><span class="line">@Override</span><br><span class="line">    public synchronized SubscriberMethod[] getSubscriberMethods() &#123;</span><br><span class="line">        int length = methodInfos.length;</span><br><span class="line">        SubscriberMethod[] methods = new SubscriberMethod[length];</span><br><span class="line">        for (int i = 0; i &lt; length; i++) &#123;</span><br><span class="line">            SubscriberMethodInfo info = methodInfos[i];</span><br><span class="line">            methods[i] = createSubscriberMethod(info.methodName, info.eventType, info.threadMode,</span><br><span class="line">                    info.priority, info.sticky);</span><br><span class="line">        &#125;</span><br><span class="line">        return methods;</span><br><span class="line">    &#125;</span><br><span class="line">```  </span><br><span class="line">逻辑不难看懂, `createSubscriberMethod()`这个方法(这个是父类方法)参数有订阅方法的所有信息; 点击去</span><br></pre></td></tr></table></figure>
+<p>protected SubscriberMethod createSubscriberMethod(String methodName, Class&lt;?&gt; eventType, ThreadMode threadMode,<br>                                                      int priority, boolean sticky) {<br>        try {<br>            Method method = subscriberClass.getDeclaredMethod(methodName, eventType);<br>            return new SubscriberMethod(method, eventType, threadMode, priority, sticky);<br>        } catch (NoSuchMethodException e) {<br>            throw new EventBusException(“Could not find subscriber method in “ + subscriberClass +<br>                    “. Maybe a missing ProGuard rule?”, e);<br>        }<br>    }</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">到这里已经很清晰了, 因为我们在编译时已经得到了所有订阅方法信息, 所以可以明确的反射出订阅方法, 不再做多余的啰嗦判断。我们直接对比没有索引是怎么反射的,`findUsingReflectionInSingleClass(findState)`这个方法就是没有使用索引时会调用的, 将`findUsingInfo()`这个方法有它的身影, 可以拉上去看看, 不过我们这里重点是对比, 下面贴代码</span><br></pre></td></tr></table></figure>
+<p>private void findUsingReflectionInSingleClass(FindState findState) {<br>        Method[] methods;<br>        try {<br>            // This is faster than getMethods, especially when subscribers are fat classes like Activities<br>            methods = findState.clazz.getDeclaredMethods();<br>        } catch (Throwable th) {<br>            // Workaround for java.lang.NoClassDefFoundError, see <a href="https://github.com/greenrobot/EventBus/issues/149" target="_blank" rel="noopener">https://github.com/greenrobot/EventBus/issues/149</a><br>            methods = findState.clazz.getMethods();<br>            findState.skipSuperClasses = true;<br>        }<br>        for (Method method : methods) {<br>            int modifiers = method.getModifiers();<br>            if ((modifiers &amp; Modifier.PUBLIC) != 0 &amp;&amp; (modifiers &amp; MODIFIERS_IGNORE) == 0) {<br>                Class<?>[] parameterTypes = method.getParameterTypes();
+                if (parameterTypes.length == 1) {
+                    Subscribe subscribeAnnotation = method.getAnnotation(Subscribe.class);
+                    if (subscribeAnnotation != null) {
+                        Class<?> eventType = parameterTypes[0];<br>                        if (findState.checkAdd(method, eventType)) {<br>                            ThreadMode threadMode = subscribeAnnotation.threadMode();<br>                            findState.subscriberMethods.add(new SubscriberMethod(method, eventType, threadMode,<br>                                    subscribeAnnotation.priority(), subscribeAnnotation.sticky()));<br>                        }<br>                    }<br>                } else if (strictMethodVerification &amp;&amp; method.isAnnotationPresent(Subscribe.class)) {<br>                    String methodName = method.getDeclaringClass().getName() + “.” + method.getName();<br>                    throw new EventBusException(“@Subscribe method “ + methodName +<br>                            “must have exactly 1 parameter but has “ + parameterTypes.length);<br>                }<br>            } else if (strictMethodVerification &amp;&amp; method.isAnnotationPresent(Subscribe.class)) {<br>                String methodName = method.getDeclaringClass().getName() + “.” + method.getName();<br>                throw new EventBusException(methodName +<br>                        “ is a illegal @Subscribe method: must be public, non-static, and non-abstract”);<br>            }<br>        }<br>    }</p>
+<pre><code>看到这个方法的代码量就可知知道为什么可以加速啦, 这个方法还要遍历所有类方法, 还要做一大堆逻辑判断; 使用了索引则是一步到位, 直接取出订阅方法。
+
+### 总结
+EventBus的索引之所以可以加速并不是绕过了反射, 而是事先把所有订阅方法信心保存起来, 用的时候就直接用这些信息去反射出方法就行了; 对比没有索引的遍历所有方法确实会快很多。如果觉得我的观点有错, 欢迎发送信息到我的邮件(649184607@qq.com)一起交流
+</code></pre>
+      
+
+      
+    </div>
+    <div class="article-info article-info-index">
+      
+      
+      
+
+      
+        <p class="article-more-link">
+          <a class="article-more-a" href="/2019/12/01/EventBus%E4%BD%BF%E7%94%A8(2)/">展开全文 >></a>
+        </p>
+      
+
+      
+      <div class="clearfix"></div>
+    </div>
+  </div>
+</article>
+
+<aside class="wrap-side-operation">
+    <div class="mod-side-operation">
+        
+        <div class="jump-container" id="js-jump-container" style="display:none;">
+            <a href="javascript:void(0)" target="_blank" rel="noopener" class="mod-side-operation__jump-to-top">
+                <i class="icon-font icon-back"></i>
+            </a>
+            <div id="js-jump-plan-container" class="jump-plan-container" style="top: -11px;">
+                <i class="icon-font icon-plane jump-plane"></i>
+            </div>
+        </div>
+        
+        
+    </div>
+</aside>
+
+
+
+
+  
     <article id="post-EventBus使用(1)" class="article article-type-post  article-index" itemscope itemprop="blogPost">
   <div class="article-inner">
     
@@ -477,11 +619,11 @@ return o(i(t),arguments.length<2?void 0:u(arguments[1]))}})},function(t,n,r){var
               </li>
              
               <li class="article-tag-list-item">
-                <a href="javascript:void(0)" target="_blank" rel="noopener" class="js-tag color2">github</a>
+                <a href="javascript:void(0)" target="_blank" rel="noopener" class="js-tag color5">NavigationView</a>
               </li>
              
               <li class="article-tag-list-item">
-                <a href="javascript:void(0)" target="_blank" rel="noopener" class="js-tag color5">NavigationView</a>
+                <a href="javascript:void(0)" target="_blank" rel="noopener" class="js-tag color2">github</a>
               </li>
             
             <div class="clearfix"></div>
