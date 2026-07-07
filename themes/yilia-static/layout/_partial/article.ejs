@@ -1,0 +1,56 @@
+<article id="post-<%- post.slug %>" class="article article-type-post <%- is_index ? ' article-index' : '' %>" itemscope itemprop="blogPost">
+  <div class="article-inner">
+    <header class="article-header">
+      <% if (is_index) { %>
+        <h1 itemprop="name">
+          <a class="article-title" href="<%- url_for(post.path) %>"><%- post.title %></a>
+        </h1>
+      <% } else { %>
+        <h1 class="article-title" itemprop="name"><%- post.title %></h1>
+      <% } %>
+      <a href="<%- url_for(post.path) %>" class="archive-article-date">
+        <time datetime="<%- date_xml(post.date) %>" itemprop="datePublished"><i class="icon-calendar icon"></i><%- date(post.date, config.date_format) %></time>
+      </a>
+    </header>
+    <div class="article-entry" itemprop="articleBody">
+      <% if (is_index && post.excerpt) { %>
+        <%- post.excerpt %>
+        <a class="article-more-a" href="<%- url_for(post.path) %>#more">more &gt;&gt;</a>
+      <% } else { %>
+        <%- post.content %>
+      <% } %>
+    </div>
+    <div class="article-info article-info-index">
+      <% if (post.tags && post.tags.length) { %>
+        <div class="article-tag tagcloud">
+          <i class="icon-price-tags icon"></i>
+          <ul class="article-tag-list">
+            <% post.tags.each(function(tag, index) { %>
+              <li class="article-tag-list-item">
+                <a href="javascript:void(0)" target="_blank" rel="noopener" class="js-tag article-tag-list-link color<%- (index % 5) + 1 %>"><%- tag.name %></a>
+              </li>
+            <% }) %>
+          </ul>
+        </div>
+      <% } %>
+      <% if (is_index) { %>
+        <p class="article-more-link">
+          <a class="article-more-a" href="<%- url_for(post.path) %>">展开全文 &gt;&gt;</a>
+        </p>
+      <% } %>
+      <div class="clearfix"></div>
+    </div>
+  </div>
+</article>
+<aside class="wrap-side-operation">
+  <div class="mod-side-operation">
+    <div class="jump-container" id="js-jump-container" style="display:none;">
+      <a href="javascript:void(0)" target="_blank" rel="noopener" class="mod-side-operation__jump-to-top">
+        <i class="icon-font icon-back"></i>
+      </a>
+      <div id="js-jump-plan-container" class="jump-plan-container" style="top: -11px;">
+        <i class="icon-font icon-plane jump-plane"></i>
+      </div>
+    </div>
+  </div>
+</aside>

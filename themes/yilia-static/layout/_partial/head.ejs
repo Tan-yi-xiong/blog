@@ -1,0 +1,24 @@
+<head>
+  <meta charset="utf-8">
+  <meta name="renderer" content="webkit">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <title><% if (page.title) { %><%- page.title %> | <% } %><%- config.title %></title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <% if (page.description || config.description) { %>
+    <meta name="description" content="<%- page.description || config.description %>">
+  <% } %>
+  <% if (page.tags && page.tags.length) { %>
+    <meta name="keywords" content="<%- page.tags.map(function(tag) { return tag.name; }).join(',') %>">
+  <% } %>
+  <meta property="og:type" content="<%- page.layout === 'post' ? 'article' : 'website' %>">
+  <meta property="og:title" content="<%- page.title || config.title %>">
+  <meta property="og:site_name" content="<%- config.title %>">
+  <meta property="og:locale" content="<%- config.language || 'zh-CN' %>">
+  <link rel="icon" href="<%- url_for('/favicon.png') %>">
+  <link rel="stylesheet" type="text/css" href="<%- url_for('/main.0cf68a.css') %>">
+  <style type="text/css">
+    #container.show {
+      background: linear-gradient(200deg,#a0cfe4,#e8c37e);
+    }
+  </style>
+</head>

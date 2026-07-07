@@ -1,0 +1,11 @@
+<section class="archives-wrap">
+  <div class="archive-year-wrap">
+    <a href="<%- url_for(config.archive_dir + '/') %>" class="archive-year">归档</a>
+  </div>
+  <div class="archives">
+    <% page.posts.each(function(post) { %>
+      <%- partial('_partial/archive-post', { post: post }) %>
+    <% }) %>
+  </div>
+</section>
+<%- partial('_partial/paginator') %>

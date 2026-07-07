@@ -1,0 +1,18 @@
+<script>
+  var yiliaConfig = {
+    mathjax: false,
+    isHome: <%- is_home() ? 'true' : 'false' %>,
+    isPost: <%- is_post() ? 'true' : 'false' %>,
+    isArchive: <%- is_archive() ? 'true' : 'false' %>,
+    isTag: <%- is_tag() ? 'true' : 'false' %>,
+    isCategory: <%- is_category() ? 'true' : 'false' %>,
+    open_in_new: true,
+    toc_hide_index: true,
+    root: "<%- config.root || '/' %>",
+    innerArchive: true,
+    showTags: false
+  }
+</script>
+<script src="<%- url_for('/mobile.992cbe.js') %>"></script>
+<script src="<%- url_for('/main.0cf68a.js') %>"></script>
+<script>!function(){!function(e){var t=document.createElement("script");document.getElementsByTagName("body")[0].appendChild(t),t.setAttribute("src",e)}("<%- url_for('/slider.e37972.js') %>")}()</script>
